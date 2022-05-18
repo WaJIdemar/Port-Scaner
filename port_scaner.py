@@ -1,11 +1,13 @@
 import argparse
+import os
 import socket
 from queue import Queue
 from threading import Lock, Thread
 
-N_THREADS = 100
+N_THREADS = 1
 q = Queue()
 add_lock = Lock()
+TIMEOUT = 1
 
 ports_info = {}
 
@@ -13,31 +15,28 @@ ports_info = {}
 def tcp_port_scan(port):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        s.settimeout(1)
+        s.settimeout(TIMEOUT)
         s.connect((host, port))
+        ports_info[port] = None
+        s.sendall(b"a\n\n")
+        data = s.recv(1024)
+        data_str = data.decode("utf-8")
+        if "+OK" in data_str:
+            ports_info[port] = "POP3"
+        elif "IMAP" in data_str:
+            ports_info[port] = "IMAP"
+        elif "220" in data_str:
+            ports_info[port] = "SMTP"
+        if "HTTP" in data_str:
+            ports_info[port] = "HTTP"
     except:
-        with add_lock:
-            ports_info[port] = False
-    else:
-        with add_lock:
-            ports_info[port] = True
+        pass
     finally:
         s.close()
 
 
 def udp_port_scan(port):
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        s.settimeout(1)
-        s.connect((host, port))
-    except:
-        with add_lock:
-            ports_info[port] = False
-    else:
-        with add_lock:
-            ports_info[port] = True
-    finally:
-        s.close()
+   pass
 
 
 def scan_tcp_thread():
@@ -76,9 +75,13 @@ def main(host, ports):
 
 def print_info():
     for port, info in ports_info.items():
-        if tcp and info:
-            print("TCP " + str(port))
-        elif udp and info:
+        if tcp:
+            if info:
+                line = "TCP " + str(port) + " " + str(info)
+            else:
+                line = "TCP " + str(port)
+            print(line)
+        elif udp:
             print("UDP " + str(port))
 
 
